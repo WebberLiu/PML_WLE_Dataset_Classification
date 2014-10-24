@@ -1,0 +1,90 @@
+---
+title: "WLE Dataset Classification"
+author: "Sergio Gelves"
+date: "Thursday, October 23, 2014"
+output: html_document
+---
+
+## Synopsis
+Using the weight lifting exercise dataset from the following source http://groupware.les.inf.puc-rio.br/har a model is created to correctly classify the way Unilateral Dumbbell Biceps Curl was done.  Class A is the correct way of doing the exercise all other classes are erroneous ways of doing the exercise.
+
+## Loading data
+First the data is downloaded from the internet and loaded into R.
+```{r}
+## download WLE training data file if it doesn't exist
+if (!file.exists("./pml-training.csv")) {
+    wleTrainingUrl = "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+    download.file(url = wleTrainingUrl, destfile = "./pml-training.csv")
+
+    ## remove link as it is no longer used
+    rm(wleTrainingUrl)
+}
+
+## download WLE testing data file if it doesn't exist
+if (!file.exists("./pml-testing.csv")) {
+    wleTestingUrl = "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+    download.file(url = wleTestingUrl, destfile = "./pml-testing.csv")
+
+    ## remove link as it is no longer used
+    rm(wleTestingUrl)
+}
+
+## load data into R dataframes
+pmlTraining = read.csv(file = "./pml-training.csv", na.strings=c("", "NA"))
+pmlTesting = read.csv(file = "./pml-testing.csv", na.strings=c("", "NA"))
+
+```
+## Preprocessing
+The first seven columns have to do with user and time so I exclude them.  All columns with NAs are also excluded.  This leaves us with 52 predictors and 1 Outcome column.
+```{r}
+## Remove first 7 columns as they are useless for the model
+pmlTesting = pmlTesting[,-(1:7)]
+pmlTraining = pmlTraining[,-(1:7)]
+
+## Remove columns with NAs
+cols=colSums(is.na(pmlTraining))==0
+pmlTraining = pmlTraining[, cols]
+pmlTesting = pmlTesting[, cols]
+rm(cols)
+
+```
+Since the testing csv file doesn't have the classes to actually test the data I divided the training csv file into 80% training and the other 20% for testing.
+```{r}
+## Load libraries
+library(lattice)
+library(ggplot2)
+library(randomForest)
+library(caret)
+
+## Randomly separate data into a training and test set
+set.seed(123)
+inTrain = createDataPartition(pmlTraining$classe, p = 0.8, list = FALSE)
+training = pmlTraining[inTrain, ]
+testing = pmlTraining[-inTrain, ]
+```
+## A bit of data exploration
+Just to see how some variables are distributed across classes
+```{r}
+xyplot(gyros_belt_y~gyros_belt_x | classe, pmlTraining)
+xyplot(accel_belt_y~accel_belt_x | classe, pmlTraining)
+```
+
+## Model Training
+Now the model is trained from the training data frame.  Since this is a classification problem with several classes random forests seems appropriate for the job.
+```{r}
+## Train model (takes a while)
+rfControl = trainControl(method="oob")
+modFit = train(classe~., data=training, method="rf", trControl=rfControl, ntree=300)
+modFit$finalModel
+```
+Now we see the confusion matrix with the testing values.
+```{r}
+pred = predict(modFit, testing)
+table(pred, testing$classe)
+```
+
+As can be seen on the table all classes are almost perfectly predicted. The cross validated error rate is 0.57% and the out of sample (test) error rate is 0.14%.
+
+
+
+
